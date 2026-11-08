@@ -285,16 +285,25 @@ function save() {
 
 const UP = 0.07, DOWN = 0.55; // v simulaciji se ustali pri ~85 % točnosti
 
-function pickLevel(op) {
-  const r = S.skills[op].r;
+// Skriti račun ima svoje ravni; ob prvi uporabi začne 2 ravni nižje od običajnega treninga.
+function hskills() {
+  if (!S.hskills) S.hskills = Object.fromEntries(OP_KEYS.map((op) => [op, { r: Math.max(1, Math.round((S.skills[op].r - 2) * 100) / 100), hist: [] }]));
+  if (!S.hrecent) S.hrecent = {};
+  return S.hskills;
+}
+const skillStore = (hidden) => (hidden ? hskills() : S.skills);
+const recentStore = (hidden) => (hidden ? (hskills(), S.hrecent) : S.recent);
+
+function pickLevel(op, hidden = false) {
+  const r = skillStore(hidden)[op].r;
   let L = Math.floor(r);
   if (Math.random() < r - L) L++;
   else if (Math.random() < 0.1) L--; // občasna lažja naloga za utrjevanje
   return clamp(L, 1, maxLevel(op));
 }
 
-function updateSkill(op, lvl, ok, t) {
-  const sk = S.skills[op];
+function updateSkill(op, lvl, ok, t, hidden = false) {
+  const sk = skillStore(hidden)[op];
   const cur = Math.floor(sk.r);
   let d;
   if (ok) {
@@ -304,13 +313,14 @@ function updateSkill(op, lvl, ok, t) {
     d = -DOWN * (lvl > cur ? 0.6 : 1);
   }
   sk.r = clamp(sk.r + d, 1, maxLevel(op) + 0.99);
-  const rec = (S.recent[op] = S.recent[op] || []);
+  const recs = recentStore(hidden);
+  const rec = (recs[op] = recs[op] || []);
   rec.push(ok ? 1 : 0);
   if (rec.length > 30) rec.shift();
 }
 
-function errRate(op) {
-  const rec = S.recent[op] || [];
+function errRate(op, hidden = false) {
+  const rec = recentStore(hidden)[op] || [];
   return rec.length ? 1 - rec.reduce((x, y) => x + y, 0) / rec.length : 0;
 }
 
@@ -451,10 +461,12 @@ function renderHome() {
   const due = S.review.filter((x) => x.due <= today).length;
   $("#due-note").textContent = due ? `${due} za ponovitev` : "";
   $("#home-skills").innerHTML = OP_KEYS.map((op) => skillRow(op)).join("");
+  $("#home-hskills-card").classList.toggle("hidden", !S.hskills);
+  if (S.hskills) $("#home-hskills").innerHTML = OP_KEYS.map((op) => skillRow(op, true)).join("");
 }
 
-function skillRow(op) {
-  const r = S.skills[op].r, mx = maxLevel(op);
+function skillRow(op, hidden = false) {
+  const r = skillStore(hidden)[op].r, mx = maxLevel(op);
   return `<div class="lvl-row" style="--c:${OPS[op].color}">
     <div class="lvl-top"><span class="mdot"></span>${OPS[op].name}<span class="num">${Math.floor(r)}<small> / ${mx}</small></span></div>
     <div class="mbar"><i style="width:${Math.max(3, ((r - 1) / mx) * 100)}%"></i></div></div>`;
@@ -473,7 +485,7 @@ function renderFree() {
   $("#free-show-wrap").classList.toggle("hidden", !hidden);
   $("#free-show").innerHTML = SHOW_OPTS.map(([v, l]) => `<button class="${S.settings.hideSec === v ? "on" : ""}" data-s="${v}">${l}</button>`).join("");
   $("#free-mode-note").textContent = hidden
-    ? (S.settings.hideSec ? `Račun izgine po ${S.settings.hideSec} s – odgovor izračunaš na pamet.` : `Račun izgine po ${fmt(Math.round(S.hideAuto * 10) / 10)} s. Čas se prilagaja: ob pravilnih odgovorih se krajša, ob napakah daljša.`) + " Ta način ne spreminja ravni običajnega treninga."
+    ? (S.settings.hideSec ? `Račun izgine po ${S.settings.hideSec} s – odgovor izračunaš na pamet.` : `Račun izgine po ${fmt(Math.round(S.hideAuto * 10) / 10)} s. Čas se prilagaja: ob pravilnih odgovorih se krajša, ob napakah daljša.`) + " Skriti račun ima svoje ravni, ločene od običajnega treninga."
     : "Prosti trening šteje za napredek, tako kot dnevni.";
   $("#free-ops").innerHTML = OP_KEYS.map((op) => `<button class="chip${freeOps.has(op) ? " on" : ""}" data-op="${op}" style="--c:${OPS[op].color}"><i></i>${OPS[op].name}</button>`).join("");
   $("#free-dur").innerHTML = [2, 3, 5, 10].map((m) => `<button class="${freeDur === m ? "on" : ""}" data-m="${m}">${m} min</button>`).join("");
@@ -510,7 +522,7 @@ let run = null;
 function startRun(mode, ops, minutes) {
   run = {
     mode, ops, durMs: (minutes || 0) * 60000, activeMs: 0, results: [], missedQ: [], usedReview: new Set(),
-    before: Object.fromEntries(OP_KEYS.map((op) => [op, S.skills[op].r])), done: false, lastOps: [],
+    before: Object.fromEntries(OP_KEYS.map((op) => [op, skillStore(mode === "hidden")[op].r])), done: false, lastOps: [],
     hidden: mode === "hidden", showBefore: hideSec(),
   };
   if (mode === "test") {
@@ -519,6 +531,7 @@ function startRun(mode, ops, minutes) {
   }
   if (history.state && history.state.s) history.replaceState({ s: "play" }, "");
   else history.pushState({ s: "play" }, "");
+  $("#play").classList.toggle("hid", mode === "hidden");
   show("play");
   nextProblem();
 }
@@ -529,13 +542,13 @@ function hideSec() {
 }
 function adaptHide(ok) {
   if (S.settings.hideSec) return;
-  S.hideAuto = clamp((S.hideAuto || 3) * (ok ? 0.92 : 1.2), 0.6, 8);
+  S.hideAuto = clamp((S.hideAuto || 3) * (ok ? 0.95 : 1.12), 0.6, 8); // počasneje, ker se prilagaja tudi raven
 }
 
 function chooseOp() {
   const w = run.ops.map((op) => {
     let x = op === "pct" ? S.settings.pctFreq : op === "div" ? 0.85 : 1;
-    x *= 1 + errRate(op); // šibkejše področje dobi več nalog
+    x *= 1 + errRate(op, run.hidden); // šibkejše področje dobi več nalog
     const l = run.lastOps;
     if (l.length >= 2 && l[l.length - 1] === op && l[l.length - 2] === op) x *= 0.05; // prepletanje
     return x;
@@ -564,13 +577,13 @@ function nextProblem() {
     if (!p) {
       const op = chooseOp();
       const prev = run.cur && run.cur.key;
-      do p = generate(op, pickLevel(op)); while (p.key === prev);
+      do p = generate(op, pickLevel(op, run.hidden)); while (p.key === prev);
     }
   }
   run.cur = p;
   run.lastOps.push(p.op);
   run.input = "";
-  $("#op-tag").textContent = OPS[p.op].name + (p.fromReview ? " · ponovitev" : p.again ? " · še enkrat" : "");
+  $("#op-tag").textContent = (run.hidden ? "Skriti račun · " : "") + OPS[p.op].name + (p.fromReview ? " · ponovitev" : p.again ? " · še enkrat" : "");
   $("#op-tag").style.color = OPS[p.op].color;
   const prob = $("#problem");
   clearTimeout(run.hideT);
@@ -639,7 +652,7 @@ function submit(skipped = false) {
   if (wasMasked) { $("#problem").classList.remove("masked"); $("#problem").textContent = p.text; }
 
   if (run.hidden) {
-    if (!p.again) adaptHide(ok);
+    if (!p.again) { updateSkill(p.op, p.lvl, ok, t, true); adaptHide(ok); }
   } else if (run.mode === "test") {
     const T = run.test, op = p.op, target = LEVELS[op][p.lvl - 1].t;
     T.step[op] = (T.step[op] || 0) + 1;
@@ -742,11 +755,12 @@ function finishRun() {
   }
   const cpm = dur ? (ok / dur) * 60 : 0;
   const today = dayKey();
-  const sess = { d: today, ts: Date.now(), mode: run.mode, ...(run.hidden ? { show: Math.round(hideSec() * 10) / 10 } : {}), dur, n: first.length, c: ok, cpm: Math.round(cpm * 10) / 10, ops: perOp, lv: Object.fromEntries(OP_KEYS.map((op) => [op, Math.round(S.skills[op].r * 100) / 100])) };
+  const sess = { d: today, ts: Date.now(), mode: run.mode, ...(run.hidden ? { show: Math.round(hideSec() * 10) / 10 } : {}), dur, n: first.length, c: ok, cpm: Math.round(cpm * 10) / 10, ops: perOp, lv: Object.fromEntries(OP_KEYS.map((op) => [op, Math.round(skillStore(run.hidden)[op].r * 100) / 100])) };
   S.sessions.push(sess);
   for (const op of OP_KEYS) {
-    const h = S.skills[op].hist;
-    const entry = { d: today, r: Math.round(S.skills[op].r * 100) / 100 };
+    const sk = skillStore(run.hidden)[op];
+    const h = sk.hist;
+    const entry = { d: today, r: Math.round(sk.r * 100) / 100 };
     if (h.length && h[h.length - 1].d === today) h[h.length - 1] = entry; else h.push(entry);
   }
   const st = streak();
@@ -781,17 +795,16 @@ function renderSummary(sess, newRecord, st) {
       <div class="note">${icon("clock")}<span>Priporočilo: <b>vsak dan ${S.settings.sessionMin} minut</b>. Kratki, redni treningi so učinkovitejši od redkih dolgih.</span></div>`;
   } else {
     const changes = OP_KEYS.filter((op) => sess.ops[op]).map((op) => {
-      const b = run.before[op], a = S.skills[op].r, o = sess.ops[op];
+      const b = run.before[op], a = skillStore(run.hidden)[op].r, o = sess.ops[op];
       const diff = Math.floor(a) - Math.floor(b);
-      if (run.hidden) return `<div class="row" style="--c:${OPS[op].color}"><span class="name"><span class="mdot"></span>${OPS[op].name}</span><b>${o.c}<small> / ${o.n}</small></b></div>`;
       const arrow = diff > 0 ? `<span class="up">↑ ${Math.floor(a)}</span>` : diff < 0 ? `<span class="down">↓ ${Math.floor(a)}</span>` : `<b>${Math.floor(a)}</b>`;
       return `<div class="row" style="--c:${OPS[op].color}"><span class="name"><span class="mdot"></span>${OPS[op].name} <small>${o.c}/${o.n}</small></span><span><small>raven</small> ${arrow}</span></div>`;
     }).join("");
     const misses = run.results.filter((r) => !r.ok && !r.again).slice(0, 8);
     let advice;
     if (run.hidden) advice = acc >= 85
-      ? "Odlično! Račun si dobro zapomnil – " + (S.settings.hideSec ? "poskusi krajši čas prikaza." : "čas prikaza se krajša.")
-      : "Zadrževanje računa v glavi je zahtevno – " + (S.settings.hideSec ? "poskusi daljši čas prikaza." : "čas prikaza se je podaljšal.");
+      ? "Odlično! Račun si dobro zapomnil – težavnost skritih računov se dviga" + (S.settings.hideSec ? "." : ", čas prikaza se krajša.")
+      : "Zadrževanje računa v glavi je zahtevno – težavnost skritih računov se je znižala" + (S.settings.hideSec ? "." : ", čas prikaza se je podaljšal.");
     else if (acc >= 93) advice = "Odlično! Naloge so bile zate morda prelahke – težavnost se dviga.";
     else if (acc >= 75) advice = "Ravno prav – učinkovito učenje poteka okoli 85 % točnosti, kjer so naloge izziv, a obvladljive.";
     else advice = "Danes je bilo zahtevno – težavnost se je malo znižala. Napake se vrnejo v ponovitvah, dokler jih ne utrdiš.";
@@ -839,9 +852,10 @@ function renderStats() {
       ${sparkline(sk.hist, op)}</div>`;
   }).join("");
 
-  if (hid.length) {
+  if (S.hskills) {
     const hn = hid.reduce((x, s) => x + s.n, 0), hc = hid.reduce((x, s) => x + s.c, 0);
-    html += `<div class="card"><div class="card-head"><h3>Skriti račun</h3><small>${hid.length} ${hid.length === 1 ? "trening" : hid.length === 2 ? "treninga" : hid.length < 5 ? "treningi" : "treningov"}</small></div><div class="rows">
+    html += `<div class="card hid-card"><div class="card-head"><h3>${icon("eye-off")}Skriti račun</h3><small>${hid.length} ${hid.length === 1 ? "trening" : hid.length === 2 ? "treninga" : hid.length < 5 ? "treningi" : "treningov"}</small></div>
+      <div class="levels" style="margin-bottom:16px">${OP_KEYS.map((op) => skillRow(op, true)).join("")}</div><div class="rows">
       <div class="row"><span class="name">Točnost</span><b>${hn ? Math.round((hc / hn) * 100) : 0} %<small> · ${hn} nalog</small></b></div>
       <div class="row"><span class="name">Čas prikaza</span><b>${S.settings.hideSec ? `${S.settings.hideSec} s` : `${fmt(Math.round(S.hideAuto * 10) / 10)} s<small> · samodejno</small>`}</b></div></div></div>`;
   }

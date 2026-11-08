@@ -11,7 +11,7 @@ Kratek dnevni trening računanja na pamet za Android telefon (PWA, deluje brez p
 - **Namigi s strategijo** ob vsaki napaki (zaokroži in popravi, razstavljanje, ×5 = ×10 ÷ 2, 10 % kot izhodišče …).
 - **Napredek** – zaporedni dnevi, ravni po področjih z zgodovino, hitrost (pravilnih/min), točnost glede na cilj 85 %, koledar vadbe, težavni primeri.
 - **Prosti trening** – izbereš operacije in trajanje.
-- **Skriti račun** – račun je viden le nekaj sekund (samodejno prilagojen čas ali 1/2/3/5 s), nato ga izračunaš na pamet. Ne spreminja ravni običajnega treninga.
+- **Skriti račun** – račun je viden le nekaj sekund (samodejno prilagojen čas ali 1/2/3/5 s), nato ga izračunaš na pamet. Ima svoje ravni (ob prvi uporabi 2 nižje od običajnih), ločene od običajnega treninga; računi so prikazani v turkizni barvi.
 - **Triki** in **O metodi** (povzetek raziskav z viri) v aplikaciji.
 - Izvoz/uvoz podatkov (JSON) za varnostno kopijo.
 
