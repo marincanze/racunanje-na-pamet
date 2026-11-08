@@ -1,5 +1,5 @@
 // Predpomni celotno aplikacijo, da deluje brez povezave.
-const CACHE = "racunanje-v2";
+const CACHE = "racunanje-v3";
 const SHELL = ["./", "index.html", "app.css", "app.js", "manifest.json", "icons/icon.svg", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
