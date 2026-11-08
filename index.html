@@ -32,6 +32,7 @@
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4"/></symbol>
     <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5 0 9 4.5 10 7a14 14 0 0 1-3.2 4.2M6.4 6.5A14 14 0 0 0 2 12c1 2.5 5 7 10 7a9.6 9.6 0 0 0 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
     <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
@@ -59,6 +60,7 @@
         <div class="levels" id="home-skills"></div>
       </div>
       <button class="cta" data-go="free"><span class="cta-ico"><svg><use href="#i-target"/></svg></span><span><b>Prosti trening</b><small>Izberi operacije in trajanje</small></span><svg class="cta-arrow"><use href="#i-right"/></svg></button>
+      <button class="cta" data-go="free" id="cta-hidden"><span class="cta-ico c3"><svg><use href="#i-eye-off"/></svg></span><span><b>Skriti račun</b><small>Račun vidiš le nekaj sekund, nato računaš na pamet</small></span><svg class="cta-arrow"><use href="#i-right"/></svg></button>
       <button class="cta" data-go="about"><span class="cta-ico c2"><svg><use href="#i-book"/></svg></span><span><b>O metodi</b><small>Na čem temelji trening</small></span><svg class="cta-arrow"><use href="#i-right"/></svg></button>
     </section>
 
@@ -113,11 +115,17 @@
     <section id="free" class="screen">
       <div class="sub-head"><button class="icon-btn" data-go="home" aria-label="Nazaj"><svg><use href="#i-left"/></svg></button><div class="title">Prosti trening</div></div>
       <div class="card">
+        <h3>Način</h3>
+        <div class="seg" id="free-mode"></div>
+        <div id="free-show-wrap">
+          <h3 style="margin-top:6px">Čas prikaza računa</h3>
+          <div class="seg" id="free-show"></div>
+        </div>
+        <p class="muted small" id="free-mode-note" style="margin:0 0 18px"></p>
         <h3>Operacije</h3>
         <div class="chips" id="free-ops"></div>
         <h3 style="margin-top:20px">Trajanje</h3>
-        <div class="seg" id="free-dur"></div>
-        <p class="muted small" style="margin:0">Prosti trening prav tako šteje za napredek.</p>
+        <div class="seg" id="free-dur" style="margin:0"></div>
       </div>
       <button id="btn-free-start" class="btn primary full big"><svg><use href="#i-play"/></svg>Začni</button>
     </section>

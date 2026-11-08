@@ -255,12 +255,12 @@ function hintFor(p) {
 
 // ---------------------------------------------------------------- stanje
 
-const DEFAULT_SETTINGS = { sessionMin: 5, autoSubmit: true, timer: true, vibrate: true, pctFreq: 0.5 };
+const DEFAULT_SETTINGS = { sessionMin: 5, autoSubmit: true, timer: true, vibrate: true, pctFreq: 0.5, hideSec: 0 };
 
 function freshState() {
   const skills = {};
   for (const op of OP_KEYS) skills[op] = { r: 1, hist: [] };
-  return { v: 1, placed: false, skills, sessions: [], review: [], recent: {}, settings: { ...DEFAULT_SETTINGS }, records: { bestStreak: 0, bestCpm: 0 } };
+  return { v: 1, placed: false, skills, sessions: [], review: [], recent: {}, settings: { ...DEFAULT_SETTINGS }, records: { bestStreak: 0, bestCpm: 0 }, hideAuto: 3 };
 }
 
 let S = load();
@@ -434,7 +434,7 @@ function renderHome() {
   }
   $("#week").innerHTML = wk;
 
-  const last7 = S.sessions.filter((s) => s.mode !== "test" && s.d > addDays(today, -7));
+  const last7 = S.sessions.filter((s) => s.mode !== "test" && s.mode !== "hidden" && s.d > addDays(today, -7));
   const n7 = last7.reduce((x, s) => x + s.n, 0);
   $("#hs-acc").textContent = n7 ? `${Math.round((last7.reduce((x, s) => x + s.c, 0) / n7) * 100)} %` : "–";
 
@@ -465,8 +465,16 @@ $("#btn-start-test").addEventListener("click", () => startRun("test", OP_KEYS));
 
 // ---------------------------------------------------------------- prosti trening
 
-let freeOps = new Set(OP_KEYS), freeDur = 3;
+let freeOps = new Set(OP_KEYS), freeDur = 3, freeMode = "free";
+const SHOW_OPTS = [[0, "samodejno"], [1, "1 s"], [2, "2 s"], [3, "3 s"], [5, "5 s"]];
 function renderFree() {
+  const hidden = freeMode === "hidden";
+  $("#free-mode").innerHTML = [["free", "Običajen"], ["hidden", "Skriti račun"]].map(([v, l]) => `<button class="${freeMode === v ? "on" : ""}" data-mode="${v}">${l}</button>`).join("");
+  $("#free-show-wrap").classList.toggle("hidden", !hidden);
+  $("#free-show").innerHTML = SHOW_OPTS.map(([v, l]) => `<button class="${S.settings.hideSec === v ? "on" : ""}" data-s="${v}">${l}</button>`).join("");
+  $("#free-mode-note").textContent = hidden
+    ? (S.settings.hideSec ? `Račun izgine po ${S.settings.hideSec} s – odgovor izračunaš na pamet.` : `Račun izgine po ${fmt(Math.round(S.hideAuto * 10) / 10)} s. Čas se prilagaja: ob pravilnih odgovorih se krajša, ob napakah daljša.`) + " Ta način ne spreminja ravni običajnega treninga."
+    : "Prosti trening šteje za napredek, tako kot dnevni.";
   $("#free-ops").innerHTML = OP_KEYS.map((op) => `<button class="chip${freeOps.has(op) ? " on" : ""}" data-op="${op}" style="--c:${OPS[op].color}"><i></i>${OPS[op].name}</button>`).join("");
   $("#free-dur").innerHTML = [2, 3, 5, 10].map((m) => `<button class="${freeDur === m ? "on" : ""}" data-m="${m}">${m} min</button>`).join("");
 }
@@ -481,7 +489,17 @@ $("#free-dur").addEventListener("click", (e) => {
   const b = e.target.closest("[data-m]");
   if (b) { freeDur = Number(b.dataset.m); renderFree(); }
 });
-$("#btn-free-start").addEventListener("click", () => startRun("free", [...freeOps], freeDur));
+$("#free-mode").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-mode]");
+  if (b) { freeMode = b.dataset.mode; renderFree(); }
+});
+$("#free-show").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-s]");
+  if (b) { S.settings.hideSec = Number(b.dataset.s); save(); renderFree(); }
+});
+$("#cta-hidden").addEventListener("click", () => { freeMode = "hidden"; });
+$$('[data-go="free"]:not(#cta-hidden)').forEach((b) => b.addEventListener("click", () => { freeMode = "free"; }));
+$("#btn-free-start").addEventListener("click", () => startRun(freeMode, [...freeOps], freeDur));
 
 // ---------------------------------------------------------------- reševanje
 
@@ -493,6 +511,7 @@ function startRun(mode, ops, minutes) {
   run = {
     mode, ops, durMs: (minutes || 0) * 60000, activeMs: 0, results: [], missedQ: [], usedReview: new Set(),
     before: Object.fromEntries(OP_KEYS.map((op) => [op, S.skills[op].r])), done: false, lastOps: [],
+    hidden: mode === "hidden", showBefore: hideSec(),
   };
   if (mode === "test") {
     run.test = { order: OP_KEYS.flatMap((op) => Array(TEST_PLAN[op]).fill(op)), i: 0, L: { ...TEST_START }, best: {}, step: {} };
@@ -502,6 +521,15 @@ function startRun(mode, ops, minutes) {
   else history.pushState({ s: "play" }, "");
   show("play");
   nextProblem();
+}
+
+// Skriti račun: koliko sekund je račun viden
+function hideSec() {
+  return S.settings.hideSec || S.hideAuto || 3;
+}
+function adaptHide(ok) {
+  if (S.settings.hideSec) return;
+  S.hideAuto = clamp((S.hideAuto || 3) * (ok ? 0.92 : 1.2), 0.6, 8);
 }
 
 function chooseOp() {
@@ -545,6 +573,8 @@ function nextProblem() {
   $("#op-tag").textContent = OPS[p.op].name + (p.fromReview ? " · ponovitev" : p.again ? " · še enkrat" : "");
   $("#op-tag").style.color = OPS[p.op].color;
   const prob = $("#problem");
+  clearTimeout(run.hideT);
+  prob.classList.remove("masked");
   prob.textContent = p.text;
   prob.classList.toggle("small", p.text.length > 11);
   $("#feedback").classList.add("hidden");
@@ -553,12 +583,16 @@ function nextProblem() {
   renderInput();
   updateProgress();
   const tb = $("#timebar");
-  tb.classList.toggle("hidden", !S.settings.timer);
+  tb.classList.toggle("hidden", !S.settings.timer && !run.hidden);
+  tb.classList.toggle("show", run.hidden);
   const bar = tb.firstElementChild;
   bar.style.transition = "none";
   bar.style.transform = "scaleX(1)";
   void bar.offsetWidth;
-  bar.style.transition = `transform ${LEVELS[p.op][p.lvl - 1].t}s linear`;
+  const secs = run.hidden ? hideSec() : LEVELS[p.op][p.lvl - 1].t;
+  run.curShow = secs;
+  if (run.hidden) run.hideT = setTimeout(() => { prob.classList.add("masked"); prob.innerHTML = `${icon("eye-off")}? ? ?`; }, secs * 1000);
+  bar.style.transition = `transform ${secs}s linear`;
   bar.style.transform = "scaleX(0)";
   run.shownAt = performance.now();
   run.waiting = false;
@@ -600,8 +634,13 @@ function submit(skipped = false) {
   run.activeMs += t * 1000;
   run.results.push({ op: p.op, lvl: p.lvl, ok, t, text: p.text, ans: p.ans, again: !!p.again });
   run.waiting = true;
+  clearTimeout(run.hideT);
+  const wasMasked = $("#problem").classList.contains("masked");
+  if (wasMasked) { $("#problem").classList.remove("masked"); $("#problem").textContent = p.text; }
 
-  if (run.mode === "test") {
+  if (run.hidden) {
+    if (!p.again) adaptHide(ok);
+  } else if (run.mode === "test") {
     const T = run.test, op = p.op, target = LEVELS[op][p.lvl - 1].t;
     T.step[op] = (T.step[op] || 0) + 1;
     if (ok && t <= target * 1.3) { T.best[op] = Math.max(T.best[op] || 0, p.lvl); T.L[op] = p.lvl + (T.step[op] <= 2 ? 2 : 1); }
@@ -615,7 +654,7 @@ function submit(skipped = false) {
 
   if (!ok && run.mode !== "test") {
     if (!p.again) {
-      reviewMiss(p);
+      if (!run.hidden) reviewMiss(p);
       run.missedQ.push({ p, at: run.results.length + 3 }, { p, at: run.results.length + 8 });
     } else if ((p.rep = (p.rep || 0) + 1) < 3) run.missedQ.push({ p, at: run.results.length + 3 });
   }
@@ -633,6 +672,7 @@ function submit(skipped = false) {
     $("#timebar").classList.add("hidden");
     const fb = $("#feedback");
     fb.innerHTML = `<div class="correct">${skipped ? "" : `Tvoj odgovor: ${esc(fmt(val) === "NaN" ? "–" : fmt(val))} · `}pravilno: <b>${fmt(p.ans)}</b></div>
+      ${run.hidden ? `<div class="shown">Račun je bil viden ${fmt(Math.round(run.curShow * 10) / 10)} s${wasMasked ? "" : " (odgovoril si, preden je izginil)"}</div>` : ""}
       ${run.mode === "test" ? "" : `<div class="hint"><div class="hint-h">${icon("bulb")}Strategija</div>${esc(hintFor(p))}</div>`}
       <button id="btn-next" class="btn primary full big">Naprej</button>`;
     fb.classList.remove("hidden");
@@ -702,7 +742,7 @@ function finishRun() {
   }
   const cpm = dur ? (ok / dur) * 60 : 0;
   const today = dayKey();
-  const sess = { d: today, ts: Date.now(), mode: run.mode, dur, n: first.length, c: ok, cpm: Math.round(cpm * 10) / 10, ops: perOp, lv: Object.fromEntries(OP_KEYS.map((op) => [op, Math.round(S.skills[op].r * 100) / 100])) };
+  const sess = { d: today, ts: Date.now(), mode: run.mode, ...(run.hidden ? { show: Math.round(hideSec() * 10) / 10 } : {}), dur, n: first.length, c: ok, cpm: Math.round(cpm * 10) / 10, ops: perOp, lv: Object.fromEntries(OP_KEYS.map((op) => [op, Math.round(S.skills[op].r * 100) / 100])) };
   S.sessions.push(sess);
   for (const op of OP_KEYS) {
     const h = S.skills[op].hist;
@@ -712,7 +752,7 @@ function finishRun() {
   const st = streak();
   let newRecord = false;
   if (st > S.records.bestStreak) S.records.bestStreak = st;
-  if (run.mode !== "test" && dur >= 120 && cpm > S.records.bestCpm) { newRecord = S.records.bestCpm > 0; S.records.bestCpm = Math.round(cpm * 10) / 10; }
+  if (run.mode !== "test" && !run.hidden && dur >= 120 && cpm > S.records.bestCpm) { newRecord = S.records.bestCpm > 0; S.records.bestCpm = Math.round(cpm * 10) / 10; }
   save();
 
   renderSummary(sess, newRecord, st);
@@ -743,12 +783,16 @@ function renderSummary(sess, newRecord, st) {
     const changes = OP_KEYS.filter((op) => sess.ops[op]).map((op) => {
       const b = run.before[op], a = S.skills[op].r, o = sess.ops[op];
       const diff = Math.floor(a) - Math.floor(b);
+      if (run.hidden) return `<div class="row" style="--c:${OPS[op].color}"><span class="name"><span class="mdot"></span>${OPS[op].name}</span><b>${o.c}<small> / ${o.n}</small></b></div>`;
       const arrow = diff > 0 ? `<span class="up">↑ ${Math.floor(a)}</span>` : diff < 0 ? `<span class="down">↓ ${Math.floor(a)}</span>` : `<b>${Math.floor(a)}</b>`;
       return `<div class="row" style="--c:${OPS[op].color}"><span class="name"><span class="mdot"></span>${OPS[op].name} <small>${o.c}/${o.n}</small></span><span><small>raven</small> ${arrow}</span></div>`;
     }).join("");
     const misses = run.results.filter((r) => !r.ok && !r.again).slice(0, 8);
     let advice;
-    if (acc >= 93) advice = "Odlično! Naloge so bile zate morda prelahke – težavnost se dviga.";
+    if (run.hidden) advice = acc >= 85
+      ? "Odlično! Račun si dobro zapomnil – " + (S.settings.hideSec ? "poskusi krajši čas prikaza." : "čas prikaza se krajša.")
+      : "Zadrževanje računa v glavi je zahtevno – " + (S.settings.hideSec ? "poskusi daljši čas prikaza." : "čas prikaza se je podaljšal.");
+    else if (acc >= 93) advice = "Odlično! Naloge so bile zate morda prelahke – težavnost se dviga.";
     else if (acc >= 75) advice = "Ravno prav – učinkovito učenje poteka okoli 85 % točnosti, kjer so naloge izziv, a obvladljive.";
     else advice = "Danes je bilo zahtevno – težavnost se je malo znižala. Napake se vrnejo v ponovitvah, dokler jih ne utrdiš.";
     html = `<div class="card hero"><div class="ring-wrap">${ring(acc / 100, `<div class="ring-num">${acc}<small> %</small></div><div class="ring-sub">točnost</div>`)}</div>
@@ -760,6 +804,7 @@ function renderSummary(sess, newRecord, st) {
       </div>
       ${newRecord ? `<div class="note">${icon("trophy")}<span>Nov osebni rekord v hitrosti!</span></div>` : ""}
       <div class="note">${icon("bulb")}<span>${advice}</span></div>
+      ${run.hidden ? `<div class="card"><div class="rows"><div class="row"><span class="name">${icon("eye-off")}Čas prikaza računa</span><b>${S.settings.hideSec ? `${S.settings.hideSec} s` : `${fmt(Math.round(run.showBefore * 10) / 10)} → ${fmt(sess.show)} s`}</b></div></div></div>` : ""}
       <div class="card"><h3>Po področjih</h3><div class="rows">${changes}</div></div>
       ${misses.length ? `<div class="card"><div class="card-head"><h3>Za ponovitev</h3><small>${icon("repeat")}</small></div><div class="rows">${misses.map((m) => `<div class="row"><span>${esc(m.text)}</span><b>${fmt(m.ans)}</b></div>`).join("")}</div></div>` : ""}`;
   }
@@ -770,7 +815,8 @@ function renderSummary(sess, newRecord, st) {
 // ---------------------------------------------------------------- napredek
 
 function renderStats() {
-  const ses = S.sessions.filter((s) => s.mode !== "test");
+  const ses = S.sessions.filter((s) => s.mode !== "test" && s.mode !== "hidden");
+  const hid = S.sessions.filter((s) => s.mode === "hidden");
   const totalN = ses.reduce((x, s) => x + s.n, 0);
   const totalC = ses.reduce((x, s) => x + s.c, 0);
   const totalMin = Math.round(ses.reduce((x, s) => x + s.dur, 0) / 60);
@@ -792,6 +838,13 @@ function renderStats() {
       <div class="mbar"><i style="width:${Math.round((sk.r - L) * 100)}%"></i></div>
       ${sparkline(sk.hist, op)}</div>`;
   }).join("");
+
+  if (hid.length) {
+    const hn = hid.reduce((x, s) => x + s.n, 0), hc = hid.reduce((x, s) => x + s.c, 0);
+    html += `<div class="card"><div class="card-head"><h3>Skriti račun</h3><small>${hid.length} ${hid.length === 1 ? "trening" : hid.length === 2 ? "treninga" : hid.length < 5 ? "treningi" : "treningov"}</small></div><div class="rows">
+      <div class="row"><span class="name">Točnost</span><b>${hn ? Math.round((hc / hn) * 100) : 0} %<small> · ${hn} nalog</small></b></div>
+      <div class="row"><span class="name">Čas prikaza</span><b>${S.settings.hideSec ? `${S.settings.hideSec} s` : `${fmt(Math.round(S.hideAuto * 10) / 10)} s<small> · samodejno</small>`}</b></div></div></div>`;
+  }
 
   html += `<div class="card chart-card" id="ch-cpm"><h3>Hitrost</h3><div class="sub">Pravilnih odgovorov na minuto · zadnjih 30 treningov</div></div>
     <div class="card chart-card" id="ch-acc"><div class="card-head"><h3>Točnost</h3><span class="legend-mini"><span class="dash"></span>cilj 85 %</span></div><div class="sub">Pri ~85 % je učenje najučinkovitejše</div></div>

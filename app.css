@@ -112,6 +112,7 @@ main { max-width: 560px; margin: 0 auto; }
 .cta small { display: block; font-size: .8rem; }
 .cta-ico { width: 42px; height: 42px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
 .cta-ico.c2 { background: rgba(242, 187, 94, .14); color: var(--op-mul); }
+.cta-ico.c3 { background: rgba(95, 207, 194, .14); color: var(--good); }
 .cta-arrow { margin-left: auto; color: var(--dim); }
 
 .seg { display: flex; gap: 4px; background: var(--field); border: 1px solid var(--border); padding: 4px; border-radius: 999px; margin-bottom: 14px; }
@@ -211,6 +212,11 @@ main { max-width: 560px; margin: 0 auto; }
 .problem-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 0; }
 .op-tag { font-size: .78rem; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); }
 .problem { font-size: clamp(2.3rem, 11vw, 3.4rem); font-weight: 700; letter-spacing: -.05em; text-align: center; line-height: 1.1; }
+.problem.masked { color: var(--dim); letter-spacing: .1em; display: flex; align-items: center; gap: 12px; }
+.problem.masked svg { width: 34px; height: 34px; stroke-width: 1.6; }
+.timebar.show > div { background: var(--accent); }
+.feedback .shown { font-size: .9rem; color: var(--muted); }
+.feedback .shown b { color: var(--text); }
 .problem.small { font-size: clamp(1.6rem, 7.5vw, 2.4rem); letter-spacing: -.04em; }
 .answer {
   min-width: 64%; min-height: 66px; padding: 6px 20px; border-radius: 20px;
